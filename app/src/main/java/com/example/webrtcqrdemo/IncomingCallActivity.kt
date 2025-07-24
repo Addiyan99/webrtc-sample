@@ -1,12 +1,15 @@
 package com.example.webrtcqrdemo
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.OnBackPressedCallback
 import org.webrtc.SessionDescription
 import android.app.NotificationManager
 
@@ -21,8 +24,8 @@ class IncomingCallActivity : AppCompatActivity() {
     
     private lateinit var tvCallerName: TextView
     private lateinit var tvConnectionStatus: TextView
-    private lateinit var btnAccept: Button
-    private lateinit var btnDecline: Button
+    private lateinit var btnAccept: ImageView
+    private lateinit var btnDecline: ImageView
     
     private var callerUserId: String? = null
     private var offer: String? = null
@@ -32,11 +35,27 @@ class IncomingCallActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Make sure the activity appears over lock screen and wakes the device
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            // For older APIs, use window flags
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+        
         setContentView(R.layout.activity_incoming_call)
         
         initViews()
         extractIntentData()
         setupClickListeners()
+        setupBackPressedHandler()
+        handleActionFromNotification()
         
         // Get WebRTC manager and signaling client from singleton
         webRTCManager = WebRTCManagerSingleton.getInstance()
@@ -197,16 +216,37 @@ class IncomingCallActivity : AppCompatActivity() {
         try {
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(1001) // Same ID used in MainActivity for incoming call notification
-            Log.d(TAG, "Incoming call notification cleared")
+            Log.d(TAG, "Incoming call notification cleared (ID: 1001)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear notification", e)
         }
     }
     
-    override fun onBackPressed() {
-        // Prevent back button - user must explicitly accept or decline
-        // Optionally, you could treat back press as decline
-        declineCall()
-        super.onBackPressed()
+    private fun setupBackPressedHandler() {
+        // Handle back button press using the modern approach
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Prevent back button - user must explicitly accept or decline
+                // Treat back press as decline
+                declineCall()
+            }
+        })
+    }
+    
+    private fun handleActionFromNotification() {
+        val action = intent.getStringExtra("action")
+        when (action) {
+            "accept" -> {
+                Log.d(TAG, "Auto-accepting call from notification")
+                acceptCall()
+            }
+            "decline" -> {
+                Log.d(TAG, "Auto-declining call from notification")
+                declineCall()
+            }
+            else -> {
+                Log.d(TAG, "No action specified, showing call UI")
+            }
+        }
     }
 }

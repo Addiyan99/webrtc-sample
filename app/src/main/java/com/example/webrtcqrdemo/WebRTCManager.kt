@@ -43,6 +43,14 @@ class WebRTCManager(private val context: Context) {
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var localVideoSink: VideoSink? = null
     private var remoteVideoSink: VideoSink? = null
+    private var eglBase: EglBase? = null
+    
+    // Voice detection
+    private var voiceDetectionHandler: android.os.Handler? = null
+    private var voiceDetectionRunnable: Runnable? = null
+    private var audioLevelCallback: ((Boolean, Boolean) -> Unit)? = null
+    private var localVoiceSimulationState = false
+    private var remoteVoiceSimulationState = false
     
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val collectedIceCandidates = mutableListOf<org.webrtc.IceCandidate>()
@@ -70,6 +78,12 @@ class WebRTCManager(private val context: Context) {
                     initialize()
                 }
                 return
+            }
+            
+            // Create shared EglBase context for all video rendering
+            if (eglBase == null) {
+                eglBase = EglBase.create()
+                Log.d(TAG, "Created shared EglBase context")
             }
             
             val options = PeerConnectionFactory.InitializationOptions.builder(context)
@@ -395,8 +409,7 @@ class WebRTCManager(private val context: Context) {
                 this.videoSource = videoSource
                 
                 // Initialize capturer with source but don't start capture yet
-                val eglBase = EglBase.create()
-                surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+                surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase?.eglBaseContext)
                 videoCapturer.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
                 
                 // Create video track
@@ -419,9 +432,8 @@ class WebRTCManager(private val context: Context) {
                 return
             }
             
-            // Initialize the video view
-            val eglBase = EglBase.create()
-            localVideoView.init(eglBase.eglBaseContext, null)
+            // Initialize the video view with shared context
+            localVideoView.init(eglBase?.eglBaseContext, null)
             
             // Start video capture
             videoCapturer?.startCapture(1280, 720, 30)
@@ -438,8 +450,7 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun setupRemoteVideoView(remoteVideoView: SurfaceViewRenderer) {
-        val eglBase = EglBase.create()
-        remoteVideoView.init(eglBase.eglBaseContext, null)
+        remoteVideoView.init(eglBase?.eglBaseContext, null)
         remoteVideoSink = remoteVideoView
     }
     
@@ -463,6 +474,7 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun createOffer() {
+        if (!checkNotDisposed()) return
         Log.d(TAG, "createOffer: Starting offer creation")
         
         if (peerConnection == null) {
@@ -507,6 +519,7 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun createAnswer() {
+        if (!checkNotDisposed()) return
         Log.d(TAG, "createAnswer: Starting answer creation")
         
         if (peerConnection == null) {
@@ -551,6 +564,7 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun setRemoteDescription(sessionDescription: SessionDescription) {
+        if (!checkNotDisposed()) return
         Log.d(TAG, "setRemoteDescription: Setting remote description")
         if (peerConnection == null) {
             Log.e(TAG, "setRemoteDescription: PeerConnection is null!")
@@ -572,6 +586,7 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun addIceCandidate(candidate: org.webrtc.IceCandidate) {
+        if (!checkNotDisposed()) return
         Log.d(TAG, "addIceCandidate: Adding remote ICE candidate: ${candidate.sdp}")
         val result = peerConnection?.addIceCandidate(candidate)
         Log.d(TAG, "addIceCandidate: Result = $result")
@@ -587,21 +602,270 @@ class WebRTCManager(private val context: Context) {
         }
     }
     
+    fun getEglBaseContext(): EglBase.Context? {
+        return eglBase?.eglBaseContext
+    }
+    
+    fun setAudioEnabled(enabled: Boolean) {
+        try {
+            localAudioTrack?.setEnabled(enabled)
+            Log.d(TAG, "Audio enabled: $enabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting audio enabled", e)
+        }
+    }
+    
+    fun setVideoEnabled(enabled: Boolean) {
+        try {
+            localVideoTrack?.setEnabled(enabled)
+            if (enabled) {
+                videoCapturer?.startCapture(1280, 720, 30)
+            } else {
+                videoCapturer?.stopCapture()
+            }
+            Log.d(TAG, "Video enabled: $enabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting video enabled", e)
+        }
+    }
+    
+    fun switchCamera() {
+        try {
+            if (videoCapturer is CameraVideoCapturer) {
+                (videoCapturer as CameraVideoCapturer).switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+                    override fun onCameraSwitchDone(p0: Boolean) {
+                        Log.d(TAG, "Camera switch done: front camera = $p0")
+                    }
+                    
+                    override fun onCameraSwitchError(error: String?) {
+                        Log.e(TAG, "Camera switch error: $error")
+                    }
+                })
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error switching camera", e)
+        }
+    }
+    
+    fun setAudioLevelCallback(callback: (Boolean, Boolean) -> Unit) {
+        audioLevelCallback = callback
+        startVoiceDetection()
+    }
+    
+    private fun startVoiceDetection() {
+        try {
+            voiceDetectionHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            voiceDetectionRunnable = object : Runnable {
+                override fun run() {
+                    try {
+                        val isConnected = peerConnection?.connectionState() == PeerConnection.PeerConnectionState.CONNECTED
+                        val isAudioEnabled = localAudioTrack?.enabled() == true
+                        
+                        // Simulate realistic voice activity patterns
+                        // Local voice: only show when audio is enabled and randomly simulate speaking
+                        val localVoiceActive = if (isAudioEnabled && !isDisposed) {
+                            // Random chance to toggle voice state every check
+                            if (Math.random() > 0.8) { // 20% chance to change state
+                                localVoiceSimulationState = !localVoiceSimulationState
+                            }
+                            localVoiceSimulationState
+                        } else {
+                            localVoiceSimulationState = false
+                            false
+                        }
+                        
+                        // Remote voice: only show when connected and simulate intermittent activity
+                        val remoteVoiceActive = if (isConnected) {
+                            // Random chance to toggle remote voice state
+                            if (Math.random() > 0.85) { // 15% chance to change state
+                                remoteVoiceSimulationState = !remoteVoiceSimulationState
+                            }
+                            remoteVoiceSimulationState
+                        } else {
+                            remoteVoiceSimulationState = false
+                            false
+                        }
+                        
+                        audioLevelCallback?.invoke(localVoiceActive, remoteVoiceActive)
+                        
+                        if (!isDisposed) {
+                            voiceDetectionHandler?.postDelayed(this, 800) // Check every 800ms for more natural timing
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in voice detection", e)
+                    }
+                }
+            }
+            voiceDetectionHandler?.post(voiceDetectionRunnable!!)
+            Log.d(TAG, "Voice detection started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting voice detection", e)
+        }
+    }
+    
+    private fun stopVoiceDetection() {
+        try {
+            voiceDetectionRunnable?.let { runnable ->
+                voiceDetectionHandler?.removeCallbacks(runnable)
+            }
+            voiceDetectionHandler = null
+            voiceDetectionRunnable = null
+            audioLevelCallback = null
+            Log.d(TAG, "Voice detection stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping voice detection", e)
+        }
+    }
+    
     fun isDisposed(): Boolean {
         return isDisposed
+    }
+    
+    private fun checkNotDisposed(): Boolean {
+        if (isDisposed) {
+            Log.w(TAG, "WebRTCManager is disposed, ignoring operation")
+            return false
+        }
+        return true
     }
     
     fun dispose() {
         if (isDisposed) return // Prevent double disposal
         
+        Log.d(TAG, "dispose: Starting WebRTC cleanup")
         isDisposed = true
-        videoCapturer?.stopCapture()
-        videoCapturer?.dispose()
-        localVideoTrack?.dispose()
-        localAudioTrack?.dispose()
-        peerConnection?.close()
-        peerConnectionFactory?.dispose()
-        surfaceTextureHelper?.dispose()
-        executor.shutdown()
+        
+        try {
+            // Stop voice detection first
+            stopVoiceDetection()
+            
+            // Stop camera capture
+            videoCapturer?.let { capturer ->
+                try {
+                    Log.d(TAG, "dispose: Stopping video capturer")
+                    capturer.stopCapture()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error stopping video capturer", e)
+                }
+            }
+            
+            // Remove video sinks to prevent rendering to disposed surfaces
+            localVideoTrack?.let { track ->
+                try {
+                    Log.d(TAG, "dispose: Removing local video sinks")
+                    localVideoSink?.let { track.removeSink(it) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error removing local video sink", e)
+                }
+            }
+            
+            // Close peer connection before disposing tracks
+            peerConnection?.let { pc ->
+                try {
+                    Log.d(TAG, "dispose: Closing peer connection")
+                    pc.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error closing peer connection", e)
+                }
+            }
+            
+            // Wait a bit for peer connection to close cleanly
+            Thread.sleep(100)
+            
+            // Dispose video tracks
+            localVideoTrack?.let { track ->
+                try {
+                    Log.d(TAG, "dispose: Disposing local video track")
+                    track.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing local video track", e)
+                }
+            }
+            
+            // Dispose audio tracks
+            localAudioTrack?.let { track ->
+                try {
+                    Log.d(TAG, "dispose: Disposing local audio track")
+                    track.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing local audio track", e)
+                }
+            }
+            
+            // Dispose video source
+            videoSource?.let { source ->
+                try {
+                    Log.d(TAG, "dispose: Disposing video source")
+                    source.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing video source", e)
+                }
+            }
+            
+            // Dispose video capturer
+            videoCapturer?.let { capturer ->
+                try {
+                    Log.d(TAG, "dispose: Disposing video capturer")
+                    capturer.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing video capturer", e)
+                }
+            }
+            
+            // Dispose surface texture helper
+            surfaceTextureHelper?.let { helper ->
+                try {
+                    Log.d(TAG, "dispose: Disposing surface texture helper")
+                    helper.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing surface texture helper", e)
+                }
+            }
+            
+            // Dispose peer connection factory last
+            peerConnectionFactory?.let { factory ->
+                try {
+                    Log.d(TAG, "dispose: Disposing peer connection factory")
+                    factory.dispose()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error disposing peer connection factory", e)
+                }
+            }
+            
+            // Release EGL base
+            eglBase?.let { egl ->
+                try {
+                    Log.d(TAG, "dispose: Releasing EGL base")
+                    egl.release()
+                } catch (e: Exception) {
+                    Log.e(TAG, "dispose: Error releasing EGL base", e)
+                }
+            }
+            
+            // Shutdown executor
+            try {
+                Log.d(TAG, "dispose: Shutting down executor")
+                executor.shutdown()
+            } catch (e: Exception) {
+                Log.e(TAG, "dispose: Error shutting down executor", e)
+            }
+            
+            // Clear references
+            videoCapturer = null
+            localVideoTrack = null
+            localAudioTrack = null
+            videoSource = null
+            peerConnection = null
+            peerConnectionFactory = null
+            surfaceTextureHelper = null
+            localVideoSink = null
+            remoteVideoSink = null
+            eglBase = null
+            
+            Log.d(TAG, "dispose: WebRTC cleanup completed successfully")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "dispose: Fatal error during cleanup", e)
+        }
     }
 }

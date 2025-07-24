@@ -12,8 +12,10 @@
     <!-- Background call handling -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
     
     <!-- Camera features -->
     <uses-feature android:name="android.hardware.camera" android:required="true" />
@@ -62,7 +64,16 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:excludeFromRecents="false"
-            android:theme="@style/Theme.WebRTCQRDemo" />
+            android:showOnLockScreen="true"
+            android:theme="@style/Theme.WebRTCQRDemo.IncomingCall" />
+            
+        <receiver android:name=".CallActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.webrtcqrdemo.ACCEPT_CALL" />
+                <action android:name="com.example.webrtcqrdemo.DECLINE_CALL" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

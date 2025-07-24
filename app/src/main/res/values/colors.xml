@@ -7,10 +7,10 @@
     <color name="primary_light">#FF2D2D2D</color>
     <color name="primary_dark">#FF0D0D0D</color>
     
-    <!-- Accent Colors -->
-    <color name="accent">#FF007AFF</color>
-    <color name="accent_light">#FF4DA6FF</color>
-    <color name="accent_dark">#FF0056CC</color>
+    <!-- Accent Colors - Toned Down -->
+    <color name="accent">#FF5A7A9A</color>
+    <color name="accent_light">#FF7A9BBA</color>
+    <color name="accent_dark">#FF3D5A7A</color>
     
     <!-- Surface Colors -->
     <color name="surface">#FFFAFAFA</color>
@@ -25,10 +25,10 @@
     <color name="text_on_dark">#FFFFFFFF</color>
     <color name="text_on_dark_secondary">#FFE0E0E0</color>
     
-    <!-- Action Colors -->
-    <color name="success">#FF00C853</color>
-    <color name="error">#FFFF3B30</color>
-    <color name="warning">#FFFF9500</color>
+    <!-- Action Colors - Toned Down -->
+    <color name="success">#FF4A8A5A</color>
+    <color name="error">#FFC55A5A</color>
+    <color name="warning">#FFCC7A3A</color>
     
     <!-- Neutral Colors -->
     <color name="white">#FFFFFFFF</color>
@@ -36,6 +36,7 @@
     <color name="transparent">#00000000</color>
     <color name="overlay">#80000000</color>
     <color name="divider">#FFE5E5E5</color>
+    <color name="border_grey">#FFCCCCCC</color>
     
     <!-- Legacy Colors (for compatibility) -->
     <color name="purple_200">#FFBB86FC</color>

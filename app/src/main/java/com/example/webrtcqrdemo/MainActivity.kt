@@ -31,7 +31,8 @@ class MainActivity : AppCompatActivity() {
         private const val NOTIFICATION_ID = 1001
         private val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.POST_NOTIFICATIONS
         )
     }
     
@@ -39,15 +40,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnScanQR: Button
     private lateinit var btnDismissQR: Button
     private lateinit var statusText: TextView
-    private lateinit var qrContainer: LinearLayout
+    private lateinit var qrContainer: androidx.cardview.widget.CardView
     private lateinit var qrCodeImage: ImageView
     private lateinit var qrTitle: TextView
     
-    // New User ID UI elements
+    // User ID UI elements
     private lateinit var etMyUserId: android.widget.EditText
     private lateinit var btnSaveUserId: Button
     private lateinit var etTargetUserId: android.widget.EditText
     private lateinit var btnCallUser: Button
+    
+    // Tab UI elements
+    private lateinit var btnTabCallId: Button
+    private lateinit var btnTabQrCode: Button
+    private lateinit var tabCallIdContent: LinearLayout
+    private lateinit var tabQrCodeContent: LinearLayout
     
     private var webRTCManager: WebRTCManager? = null
     private var isOfferer = false
@@ -97,6 +104,7 @@ class MainActivity : AppCompatActivity() {
             checkPermissions()
             Log.d(TAG, "onCreate: Permission check completed")
             
+            
         } catch (e: Exception) {
             Log.e(TAG, "onCreate: Fatal error during activity creation", e)
             // Show a basic error dialog and finish the activity
@@ -132,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             qrTitle = findViewById(R.id.qrTitle)
             Log.d(TAG, "qrTitle initialized")
             
-            // Initialize new User ID UI elements
+            // Initialize User ID UI elements
             etMyUserId = findViewById(R.id.etMyUserId)
             Log.d(TAG, "etMyUserId initialized")
             
@@ -145,6 +153,19 @@ class MainActivity : AppCompatActivity() {
             btnCallUser = findViewById(R.id.btnCallUser)
             Log.d(TAG, "btnCallUser initialized")
             
+            // Initialize Tab UI elements
+            btnTabCallId = findViewById(R.id.btnTabCallId)
+            Log.d(TAG, "btnTabCallId initialized")
+            
+            btnTabQrCode = findViewById(R.id.btnTabQrCode)
+            Log.d(TAG, "btnTabQrCode initialized")
+            
+            tabCallIdContent = findViewById(R.id.tabCallIdContent)
+            Log.d(TAG, "tabCallIdContent initialized")
+            
+            tabQrCodeContent = findViewById(R.id.tabQrCodeContent)
+            Log.d(TAG, "tabQrCodeContent initialized")
+            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize views", e)
             throw RuntimeException("View initialization failed", e)
@@ -152,18 +173,21 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupClickListeners() {
-        btnStartCall.setOnClickListener { this.startCall() }
+        // Tab functionality
+        btnTabCallId.setOnClickListener { showCallIdTab() }
+        btnTabQrCode.setOnClickListener { showQrCodeTab() }
+        
+        // QR Code tab buttons (only for generating QR codes)
+        btnStartCall.setOnClickListener { generateQRCode() }
         btnScanQR.setOnClickListener { scanQRCode() }
         btnDismissQR.setOnClickListener { 
-            // For POC: Make dismiss button start call directly
-            Log.d(TAG, "Dismiss button pressed - starting call for POC")
+            Log.d(TAG, "Dismiss QR button pressed")
             hideQRCode()
-            startVideoCall()
         }
         
-        // New User ID functionality
+        // Call via ID tab buttons (only for direct calls)
         btnSaveUserId.setOnClickListener { saveUserId() }
-        btnCallUser.setOnClickListener { initiateCall() }
+        btnCallUser.setOnClickListener { initiateDirectCall() }
         
         // Enable call button when both user IDs are set
         etTargetUserId.addTextChangedListener(object : android.text.TextWatcher {
@@ -175,6 +199,51 @@ class MainActivity : AppCompatActivity() {
         })
     }
     
+    private fun showCallIdTab() {
+        // Update tab button states
+        btnTabCallId.background = resources.getDrawable(R.drawable.button_background, null)
+        btnTabCallId.setTextColor(resources.getColor(R.color.white, null))
+        btnTabQrCode.background = resources.getDrawable(R.drawable.button_outline_background, null)
+        btnTabQrCode.setTextColor(resources.getColor(R.color.accent, null))
+        
+        // Show/hide tab content
+        tabCallIdContent.visibility = View.VISIBLE
+        tabQrCodeContent.visibility = View.GONE
+        
+        Log.d(TAG, "Switched to Call via ID tab")
+    }
+    
+    private fun showQrCodeTab() {
+        // Update tab button states
+        btnTabQrCode.background = resources.getDrawable(R.drawable.button_background, null)
+        btnTabQrCode.setTextColor(resources.getColor(R.color.white, null))
+        btnTabCallId.background = resources.getDrawable(R.drawable.button_outline_background, null)
+        btnTabCallId.setTextColor(resources.getColor(R.color.accent, null))
+        
+        // Show/hide tab content
+        tabCallIdContent.visibility = View.GONE
+        tabQrCodeContent.visibility = View.VISIBLE
+        
+        Log.d(TAG, "Switched to Call via QR tab")
+    }
+    
+    private fun generateQRCode() {
+        Log.d(TAG, "Generate QR Code button pressed - only generating QR, not calling")
+        startCall() // This will generate the QR code only
+    }
+    
+    private fun initiateDirectCall() {
+        val targetUserId = etTargetUserId.text.toString().trim()
+        if (targetUserId.isEmpty()) {
+            Toast.makeText(this, "Please enter a user ID to call", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        Log.d(TAG, "Initiating direct call to: $targetUserId")
+        // Call the existing initiateCall method
+        initiateCall()
+    }
+
     private fun saveUserId() {
         val userId = etMyUserId.text.toString().trim()
         if (userId.isEmpty()) {
@@ -281,7 +350,8 @@ class MainActivity : AppCompatActivity() {
             override fun onConnected() {
                 runOnUiThread {
                     Log.d(TAG, "Connected to signaling server")
-                    statusText.text = "Connected to server"
+                    statusText.text = "Connected to server - Ready to receive calls"
+                    Toast.makeText(this@MainActivity, "Connected! Ready to receive calls", Toast.LENGTH_SHORT).show()
                     signalingClient?.registerUser(userId)
                 }
             }
@@ -306,8 +376,10 @@ class MainActivity : AppCompatActivity() {
             }
             
             override fun onIncomingCall(fromUserId: String, offer: String, iceCandidates: List<IceCandidate>) {
+                Log.d(TAG, "SignalingClient.onIncomingCall: Received call from $fromUserId")
                 runOnUiThread {
-                    Log.d(TAG, "Incoming call from: $fromUserId")
+                    Log.d(TAG, "Processing incoming call from: $fromUserId")
+                    Toast.makeText(this@MainActivity, "Incoming call from $fromUserId", Toast.LENGTH_SHORT).show()
                     showIncomingCall(fromUserId, offer, iceCandidates)
                 }
             }
@@ -462,17 +534,29 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Incoming Calls",
+                "Incoming Video Calls",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for incoming video calls"
                 setShowBadge(true)
                 enableVibration(true)
                 enableLights(true)
+                setBypassDnd(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                
+                // Phone call-like settings
+                setSound(android.provider.Settings.System.DEFAULT_RINGTONE_URI, android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build())
+                
+                // Long vibration pattern like phone calls
+                vibrationPattern = longArrayOf(0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000)
             }
             
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
+            Log.d(TAG, "Notification channel created successfully")
         }
     }
     
@@ -480,18 +564,47 @@ class MainActivity : AppCompatActivity() {
         try {
             Log.d(TAG, "showIncomingCall: Incoming call from $fromUserId")
             
+            // Wake up the device using modern approach
+            val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            val wakeLock = powerManager.newWakeLock(
+                android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                "WebRTC:IncomingCall"
+            )
+            wakeLock.acquire(30000) // 30 seconds
+            
             // Create intent for incoming call activity
             val intent = Intent(this, IncomingCallActivity::class.java).apply {
                 putExtra(IncomingCallActivity.EXTRA_CALLER_ID, fromUserId)
                 putExtra(IncomingCallActivity.EXTRA_OFFER, offer)
                 // Note: ICE candidates would need proper serialization in a real app
                 
-                // Make it appear over other apps and wake screen
+                // Modern flags for incoming call display
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+                       Intent.FLAG_ACTIVITY_NO_USER_ACTION
             }
+            
+            // Create decline broadcast intent
+            val declineIntent = Intent(CallActionReceiver.ACTION_DECLINE_CALL).apply {
+                setClass(this@MainActivity, CallActionReceiver::class.java)
+                putExtra(IncomingCallActivity.EXTRA_CALLER_ID, fromUserId)
+            }
+            val declinePendingIntent = PendingIntent.getBroadcast(
+                this, 1, declineIntent, 
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            // Create accept broadcast intent  
+            val acceptIntent = Intent(CallActionReceiver.ACTION_ACCEPT_CALL).apply {
+                setClass(this@MainActivity, CallActionReceiver::class.java)
+                putExtra(IncomingCallActivity.EXTRA_CALLER_ID, fromUserId)
+                putExtra(IncomingCallActivity.EXTRA_OFFER, offer)
+            }
+            val acceptPendingIntent = PendingIntent.getBroadcast(
+                this, 2, acceptIntent, 
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
             
             // Create full-screen intent for immediate display
             val fullScreenPendingIntent = PendingIntent.getActivity(
@@ -499,29 +612,47 @@ class MainActivity : AppCompatActivity() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            // Show notification for background calls
+            // Show notification for background calls with call-like behavior
             val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Incoming Call")
-                .setContentText("Call from $fromUserId")
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentTitle("Incoming Video Call")
+                .setContentText("$fromUserId is calling you")
+                .setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setFullScreenIntent(fullScreenPendingIntent, true)
                 .setOngoing(true)
-                .setAutoCancel(true)
+                .setAutoCancel(false)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setTimeoutAfter(45000) // Auto-dismiss after 45 seconds
+                .setSound(android.provider.Settings.System.DEFAULT_RINGTONE_URI)
+                .setVibrate(longArrayOf(0, 1000, 1000, 1000, 1000, 1000, 1000))
+                .addAction(android.R.drawable.sym_call_missed, "Decline", declinePendingIntent)
+                .addAction(android.R.drawable.sym_call_incoming, "Accept", acceptPendingIntent)
+                .setContentIntent(fullScreenPendingIntent) // Make notification clickable
+                .setDeleteIntent(declinePendingIntent) // Auto decline when swiped away
                 .build()
             
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.notify(NOTIFICATION_ID, notification)
+            Log.d(TAG, "Full-screen notification sent with ID: $NOTIFICATION_ID")
             
-            // Also directly start the activity
+            // Force start the activity immediately for foreground users
             startActivity(intent)
+            Log.d(TAG, "IncomingCallActivity started directly")
+            
+            // Release wake lock after a delay
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (wakeLock.isHeld) {
+                    wakeLock.release()
+                }
+            }, 30000)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error showing incoming call", e)
             Toast.makeText(this, "Error showing incoming call: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
+    
     
     private fun handleCallAnswered(answer: String, iceCandidates: List<IceCandidate>) {
         try {

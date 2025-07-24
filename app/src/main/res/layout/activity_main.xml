@@ -18,47 +18,50 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="40dp"
             android:gravity="center_horizontal"
-            android:layout_marginBottom="48dp"
-            android:layout_marginTop="32dp">
+            android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:fontFamily="sans-serif-thin"
+                android:letterSpacing="0.05"
                 android:text="@string/app_name"
-                android:textSize="32sp"
                 android:textColor="@color/text_primary"
-                android:textStyle="normal"
-                android:fontFamily="sans-serif-light"
-                android:layout_marginBottom="8dp" />
+                android:textSize="36sp"
+                android:textStyle="normal" />
 
             <View
-                android:layout_width="80dp"
-                android:layout_height="2dp"
-                android:background="@color/accent"
-                android:layout_marginBottom="16dp" />
+                android:layout_width="60dp"
+                android:layout_height="1dp"
+                android:layout_marginBottom="20dp"
+                android:background="@color/text_hint" />
 
             <TextView
                 android:id="@+id/statusText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Ready to connect"
-                android:textSize="16sp"
-                android:textColor="@color/text_secondary"
+                android:alpha="0.8"
                 android:fontFamily="sans-serif"
-                android:gravity="center" />
+                android:gravity="center"
+                android:text="Ready to connect"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
 
         </LinearLayout>
 
-        <!-- Main Content Card -->
+        <!-- User ID Section -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
+            android:background="@drawable/card_border_background"
+            app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="16dp"
-            app:cardElevation="2dp"
-            app:cardBackgroundColor="@color/white">
+            app:cardElevation="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -66,113 +69,50 @@
                 android:orientation="vertical"
                 android:padding="24dp">
 
-                <!-- User ID Section -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.1"
                     android:text="Your ID"
-                    android:textSize="14sp"
+                    android:textAllCaps="true"
                     android:textColor="@color/text_secondary"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="32dp">
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginEnd="12dp"
-                        app:boxBackgroundMode="outline"
-                        app:boxCornerRadiusTopStart="12dp"
-                        app:boxCornerRadiusTopEnd="12dp"
-                        app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp"
-                        app:boxStrokeColor="@color/accent"
-                        app:hintTextColor="@color/text_hint">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etMyUserId"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="Enter your user ID"
-                            android:inputType="text"
-                            android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_hint"
-                            android:fontFamily="sans-serif" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSaveUserId"
-                        android:layout_width="wrap_content"
-                        android:layout_height="56dp"
-                        android:text="Save"
-                        android:textColor="@color/white"
-                        android:backgroundTint="@color/accent"
-                        app:cornerRadius="12dp"
-                        app:elevation="0dp"
-                        android:fontFamily="sans-serif-medium" />
-
-                </LinearLayout>
-
-                <!-- Call Section -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Make a Call"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp"
-                    android:fontFamily="sans-serif-medium" />
+                    android:textSize="12sp"
+                    android:textStyle="normal" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
-                    <com.google.android.material.textfield.TextInputLayout
+                    <EditText
+                        android:id="@+id/etMyUserId"
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
+                        android:layout_height="52dp"
+                        android:layout_marginEnd="16dp"
                         android:layout_weight="1"
-                        android:layout_marginEnd="12dp"
-                        app:boxBackgroundMode="outline"
-                        app:boxCornerRadiusTopStart="12dp"
-                        app:boxCornerRadiusTopEnd="12dp"
-                        app:boxCornerRadiusBottomStart="12dp"
-                        app:boxCornerRadiusBottomEnd="12dp"
-                        app:boxStrokeColor="@color/accent"
-                        app:hintTextColor="@color/text_hint">
+                        android:background="@drawable/edittext_background"
+                        android:fontFamily="sans-serif"
+                        android:hint="Enter your user ID"
+                        android:inputType="text"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint"
+                        android:textSize="15sp" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etTargetUserId"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="Enter user ID to call"
-                            android:inputType="text"
-                            android:textColor="@color/text_primary"
-                            android:textColorHint="@color/text_hint"
-                            android:fontFamily="sans-serif" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnCallUser"
+                    <Button
+                        android:id="@+id/btnSaveUserId"
                         android:layout_width="wrap_content"
-                        android:layout_height="56dp"
-                        android:text="Call"
+                        android:layout_height="52dp"
+                        android:background="@drawable/button_background"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:paddingHorizontal="24dp"
+                        android:text="Save"
                         android:textColor="@color/white"
-                        android:backgroundTint="@color/success"
-                        app:cornerRadius="12dp"
-                        app:elevation="0dp"
-                        android:enabled="false"
-                        android:fontFamily="sans-serif-medium" />
+                        android:textSize="14sp" />
 
                 </LinearLayout>
 
@@ -180,14 +120,15 @@
 
         </androidx.cardview.widget.CardView>
 
-        <!-- QR Code Section -->
+        <!-- Tab Layout -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
+            android:background="@drawable/card_border_background"
+            app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="16dp"
-            app:cardElevation="2dp"
-            app:cardBackgroundColor="@color/white">
+            app:cardElevation="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -195,44 +136,143 @@
                 android:orientation="vertical"
                 android:padding="24dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <!-- Tab Headers -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="QR Code Options"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="16dp"
-                    android:fontFamily="sans-serif-medium" />
+                    android:layout_marginBottom="24dp"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStartCall"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="@string/start_call"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/accent"
-                    app:cornerRadius="12dp"
-                    app:elevation="0dp"
-                    android:layout_marginBottom="12dp"
-                    android:fontFamily="sans-serif-medium"
-                    app:icon="@android:drawable/ic_menu_camera"
-                    app:iconGravity="textStart" />
+                    <Button
+                        android:id="@+id/btnTabCallId"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/button_background"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:text="Call via ID"
+                        android:textColor="@color/white"
+                        android:textSize="14sp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnScanQR"
+                    <Button
+                        android:id="@+id/btnTabQrCode"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/button_outline_background"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:text="Call via QR"
+                        android:textColor="@color/accent"
+                        android:textSize="14sp" />
+
+                </LinearLayout>
+
+                <!-- Call via ID Tab Content -->
+                <LinearLayout
+                    android:id="@+id/tabCallIdContent"
                     android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="@string/scan_qr"
-                    android:textColor="@color/accent"
-                    android:backgroundTint="@color/surface_variant"
-                    app:cornerRadius="12dp"
-                    app:elevation="0dp"
-                    android:fontFamily="sans-serif-medium"
-                    app:strokeColor="@color/accent"
-                    app:strokeWidth="1dp"
-                    app:icon="@android:drawable/ic_menu_search"
-                    app:iconGravity="textStart" />
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.1"
+                        android:text="Direct Call"
+                        android:textAllCaps="true"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="normal" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <EditText
+                            android:id="@+id/etTargetUserId"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_marginEnd="16dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/edittext_background"
+                            android:fontFamily="sans-serif"
+                            android:hint="Enter user ID to call"
+                            android:inputType="text"
+                            android:paddingHorizontal="20dp"
+                            android:paddingVertical="16dp"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_hint"
+                            android:textSize="15sp" />
+
+                        <Button
+                            android:id="@+id/btnCallUser"
+                            android:layout_width="wrap_content"
+                            android:layout_height="52dp"
+                            android:background="@drawable/button_success_background"
+                            android:enabled="false"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.05"
+                            android:paddingHorizontal="24dp"
+                            android:text="Call"
+                            android:textColor="@color/white"
+                            android:textSize="14sp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <!-- Call via QR Tab Content -->
+                <LinearLayout
+                    android:id="@+id/tabQrCodeContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="20dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.1"
+                        android:text="Quick Connect"
+                        android:textAllCaps="true"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="normal" />
+
+                    <Button
+                        android:id="@+id/btnStartCall"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/button_background"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:text="@string/start_call"
+                        android:textColor="@color/white"
+                        android:textSize="15sp" />
+
+                    <Button
+                        android:id="@+id/btnScanQR"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:background="@drawable/button_outline_background"
+                        android:fontFamily="sans-serif-medium"
+                        android:letterSpacing="0.05"
+                        android:text="@string/scan_qr"
+                        android:textColor="@color/accent"
+                        android:textSize="15sp" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
@@ -243,58 +283,58 @@
             android:id="@+id/qrContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="@drawable/card_border_background"
             android:visibility="gone"
+            app:cardBackgroundColor="@color/white"
             app:cardCornerRadius="16dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="@color/white">
+            app:cardElevation="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="center"
                 android:orientation="vertical"
-                android:padding="24dp"
-                android:gravity="center">
+                android:padding="24dp">
 
                 <TextView
                     android:id="@+id/qrTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/offer_qr_title"
-                    android:textSize="18sp"
-                    android:textColor="@color/text_primary"
-                    android:textStyle="bold"
                     android:layout_marginBottom="24dp"
                     android:fontFamily="sans-serif-medium"
-                    android:gravity="center" />
+                    android:gravity="center"
+                    android:text="@string/offer_qr_title"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
 
                 <androidx.cardview.widget.CardView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="0dp"
+                    android:layout_marginBottom="24dp"
+                    android:background="@drawable/card_border_background"
                     app:cardBackgroundColor="@color/white"
-                    android:layout_marginBottom="24dp">
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="0dp">
 
                     <ImageView
                         android:id="@+id/qrCodeImage"
                         android:layout_width="280dp"
                         android:layout_height="280dp"
-                        android:padding="12dp"
                         android:contentDescription="QR Code"
+                        android:padding="12dp"
                         android:scaleType="fitCenter" />
 
                 </androidx.cardview.widget.CardView>
 
-                <com.google.android.material.button.MaterialButton
+                <Button
                     android:id="@+id/btnDismissQR"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
+                    android:background="@drawable/button_outline_background"
+                    android:fontFamily="sans-serif-medium"
                     android:text="Close"
-                    android:textColor="@color/text_secondary"
-                    android:backgroundTint="@color/surface_variant"
-                    app:cornerRadius="24dp"
-                    app:elevation="0dp"
-                    android:fontFamily="sans-serif-medium" />
+                    android:textColor="@color/text_secondary" />
 
             </LinearLayout>
 

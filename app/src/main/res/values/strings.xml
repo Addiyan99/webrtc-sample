@@ -1,11 +1,11 @@
 <resources>
-    <string name="app_name">WebRTC Video Call POC</string>
-    <string name="start_call">Start Call</string>
+    <string name="app_name">WebRTC</string>
+    <string name="start_call">Generate QR Code</string>
     <string name="scan_qr">Scan QR Code</string>
-    <string name="offer_qr_title">Scan this QR code to join the call</string>
+    <string name="offer_qr_title">Scan this code to connect</string>
     <string name="end_call">End Call</string>
     <string name="connecting">Connecting...</string>
     <string name="permission_required">Camera and microphone permissions are required for video calls</string>
-    <string name="waiting_for_peer">Waiting for peer to join...</string>
-    <string name="answer_qr_title">Scan this QR code on the other device</string>
+    <string name="waiting_for_peer">Waiting for connection...</string>
+    <string name="answer_qr_title">Scan this code to connect</string>
 </resources>
