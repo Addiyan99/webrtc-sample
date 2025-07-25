@@ -21,6 +21,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import org.webrtc.RtpTransceiver
 import org.webrtc.SessionDescription
 
 class MainActivity : AppCompatActivity() {
@@ -473,6 +474,10 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     
+                    override fun onTrack(transceiver: RtpTransceiver) {
+                        Log.d(TAG, "Remote track added")
+                    }
+
                     override fun onAddStream(stream: org.webrtc.MediaStream) {
                         Log.d(TAG, "Remote stream added")
                     }
@@ -661,7 +666,7 @@ class MainActivity : AppCompatActivity() {
                     org.webrtc.SessionDescription.Type.ANSWER,
                     answer
                 )
-                manager.setRemoteDescription(sessionDescription)
+                manager.setRemoteDescription(sessionDescription){}
                 
                 // Add ICE candidates
                 iceCandidates.forEach { candidate ->
@@ -837,10 +842,14 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 
+                override fun onTrack(transceiver: RtpTransceiver) {
+                    Log.d(TAG, "Remote track added")
+                }
+
                 override fun onAddStream(stream: org.webrtc.MediaStream) {
                     Log.d(TAG, "Stream added")
-                }
-                
+                    }
+
                 override fun onRemoveStream(stream: org.webrtc.MediaStream) {
                     Log.d(TAG, "Stream removed")
                 }
@@ -973,7 +982,7 @@ class MainActivity : AppCompatActivity() {
                     SessionDescription.Type.OFFER,
                     offerData.sdp
                 )
-                manager.setRemoteDescription(sessionDescription)
+                manager.setRemoteDescription(sessionDescription){}
                 
                 // Add ICE candidates from the offer
                 Log.d(TAG, "handleOfferReceived: Adding ${offerData.iceCandidates.size} ICE candidates")
@@ -1021,7 +1030,7 @@ class MainActivity : AppCompatActivity() {
                     SessionDescription.Type.ANSWER,
                     answerData.sdp
                 )
-                manager.setRemoteDescription(sessionDescription)
+                manager.setRemoteDescription(sessionDescription){}
                 
                 // Add ICE candidates from the answer
                 Log.d(TAG, "handleAnswerReceived: Adding ${answerData.iceCandidates.size} ICE candidates")

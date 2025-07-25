@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black"
+    android:background="#000000"
     tools:context=".VideoCallActivity">
 
     <!-- Remote video (full screen) -->
@@ -12,7 +12,8 @@
         android:id="@+id/remoteVideoView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_centerInParent="true" />
+        android:layout_centerInParent="true"
+        android:visibility="visible" />
 
     <!-- Top Status Overlay -->
     <LinearLayout
@@ -20,18 +21,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:orientation="vertical"
         android:background="@drawable/top_overlay_gradient"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
         android:paddingTop="48dp"
-        android:paddingBottom="24dp"
-        android:paddingHorizontal="24dp">
+        android:paddingBottom="24dp">
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:orientation="horizontal"
-            android:gravity="center">
+            android:gravity="center"
+            android:orientation="horizontal">
 
             <!-- Remote voice indicator -->
             <ImageView
@@ -47,13 +48,13 @@
                 android:id="@+id/statusText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:background="@drawable/status_chip_background"
+                android:fontFamily="sans-serif-medium"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="6dp"
                 android:text="@string/connecting"
                 android:textColor="@color/text_on_dark"
-                android:textSize="16sp"
-                android:fontFamily="sans-serif-medium"
-                android:background="@drawable/status_chip_background"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="6dp" />
+                android:textSize="16sp" />
 
         </LinearLayout>
 
@@ -119,40 +120,40 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:orientation="vertical"
         android:background="@drawable/bottom_overlay_gradient"
+        android:orientation="vertical"
+        android:paddingHorizontal="32dp"
         android:paddingTop="24dp"
-        android:paddingBottom="48dp"
-        android:paddingHorizontal="32dp">
+        android:paddingBottom="48dp">
 
         <!-- Main Controls -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:layout_height="101dp"
+            android:layout_marginBottom="16dp"
             android:gravity="center"
-            android:layout_marginBottom="16dp">
+            android:orientation="horizontal">
 
             <!-- Mute Button -->
             <androidx.cardview.widget.CardView
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                app:cardCornerRadius="32dp"
-                app:cardElevation="4dp"
+                android:layout_marginEnd="24dp"
                 app:cardBackgroundColor="@color/surface_dark_variant"
-                android:layout_marginEnd="24dp">
+                app:cardCornerRadius="32dp"
+                app:cardElevation="4dp">
 
                 <ImageView
                     android:id="@+id/btnMute"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_gravity="center"
-                    android:src="@android:drawable/ic_btn_speak_now"
-                    android:tint="@color/white"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
+                    android:contentDescription="Mute/Unmute"
                     android:focusable="true"
-                    android:contentDescription="Mute/Unmute" />
+                    android:src="@android:drawable/ic_btn_speak_now"
+                    android:tint="@color/white" />
 
             </androidx.cardview.widget.CardView>
 
@@ -160,21 +161,21 @@
             <androidx.cardview.widget.CardView
                 android:layout_width="80dp"
                 android:layout_height="80dp"
+                app:cardBackgroundColor="@color/error"
                 app:cardCornerRadius="40dp"
-                app:cardElevation="6dp"
-                app:cardBackgroundColor="@color/error">
+                app:cardElevation="6dp">
 
                 <ImageView
                     android:id="@+id/btnEndCall"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:layout_gravity="center"
-                    android:src="@android:drawable/sym_call_missed"
-                    android:tint="@color/white"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
+                    android:contentDescription="End Call"
                     android:focusable="true"
-                    android:contentDescription="End Call" />
+                    android:src="@android:drawable/sym_call_missed"
+                    android:tint="@color/white" />
 
             </androidx.cardview.widget.CardView>
 
@@ -182,22 +183,22 @@
             <androidx.cardview.widget.CardView
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                app:cardCornerRadius="32dp"
-                app:cardElevation="4dp"
+                android:layout_marginStart="24dp"
                 app:cardBackgroundColor="@color/surface_dark_variant"
-                android:layout_marginStart="24dp">
+                app:cardCornerRadius="32dp"
+                app:cardElevation="4dp">
 
                 <ImageView
                     android:id="@+id/btnVideo"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_camera"
-                    android:tint="@color/white"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
+                    android:contentDescription="Turn Video On/Off"
                     android:focusable="true"
-                    android:contentDescription="Turn Video On/Off" />
+                    android:src="@android:drawable/ic_menu_camera"
+                    android:tint="@color/white" />
 
             </androidx.cardview.widget.CardView>
 

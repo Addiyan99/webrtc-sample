@@ -10,6 +10,10 @@ import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceViewRenderer
+import android.view.View
+import org.webrtc.RtpReceiver
+import org.webrtc.VideoTrack
+import org.webrtc.RtpTransceiver
 
 class VideoCallActivity : AppCompatActivity() {
     
@@ -34,6 +38,7 @@ class VideoCallActivity : AppCompatActivity() {
     private var isMuted = false
     private var isVideoEnabled = true
     private var isUsingFrontCamera = true
+    private var isRemoteVideoViewInitialized = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,9 +60,13 @@ class VideoCallActivity : AppCompatActivity() {
         localVoiceIndicator = findViewById(R.id.localVoiceIndicator)
         remoteVoiceIndicator = findViewById(R.id.remoteVoiceIndicator)
         
-        // Ensure proper z-ordering for video views
+        // Proper z-ordering for video views
         localVideoView.clipToOutline = true
-        remoteVideoView.setZOrderMediaOverlay(false)
+        localVideoView.setZOrderMediaOverlay(true) // Local video on top
+        remoteVideoView.setZOrderMediaOverlay(false) // Remote video in background
+        remoteVideoView.setEnableHardwareScaler(true)
+        remoteVideoView.setMirror(false)
+        localVideoView.setMirror(true) // Mirror local video for user
     }
     
     private fun setupClickListeners() {
@@ -83,13 +92,71 @@ class VideoCallActivity : AppCompatActivity() {
         webRTCManager = WebRTCManagerSingleton.getInstance()
         
         if (webRTCManager == null) {
-            Log.e("VideoCallActivity", "No WebRTC manager available from MainActivity")
+            Log.e(TAG, "No WebRTC manager available from MainActivity")
             statusText.text = "WebRTC connection error"
             return
         }
         
-        Log.d("VideoCallActivity", "Using existing WebRTC manager")
+        Log.d(TAG, "Using existing WebRTC manager")
         webRTCManager?.let { manager ->
+            // CRITICAL FIX: Initialize remote video view with proper error handling and retry
+            try {
+                val eglContext = manager.getEglBaseContext()
+                if (eglContext != null) {
+                    Log.d(TAG, "Initializing remote video view with EGL context")
+                    
+                    // ENHANCED: Force initialization on main thread with multiple attempts
+                    runOnUiThread {
+                        try {
+                            // Ensure the view is ready
+                            remoteVideoView.visibility = View.VISIBLE
+                            remoteVideoView.setZOrderMediaOverlay(false)
+                            remoteVideoView.setEnableHardwareScaler(true)
+                            remoteVideoView.setMirror(false)
+                            
+                            // Initialize with shared EGL context
+                            remoteVideoView.init(eglContext, null)
+                            isRemoteVideoViewInitialized = true
+                            
+                            Log.d(TAG, "✅ Remote video view initialized successfully")
+                            
+                            // CRITICAL: Setup the remote video view in the manager AFTER successful init
+                            manager.setupRemoteVideoView(remoteVideoView)
+                            Log.d(TAG, "✅ Remote video view registered with manager")
+                            
+                            // Force layout to ensure view is ready for rendering
+                            remoteVideoView.requestLayout()
+                            
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error initializing remote video view", e)
+                            isRemoteVideoViewInitialized = false
+                            
+                            // RETRY MECHANISM: Try again after a short delay
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                Log.d(TAG, "🔄 Retrying remote video view initialization")
+                                try {
+                                    remoteVideoView.init(eglContext, null)
+                                    manager.setupRemoteVideoView(remoteVideoView)
+                                    isRemoteVideoViewInitialized = true
+                                    Log.d(TAG, "✅ Remote video view initialized on retry")
+                                } catch (retryException: Exception) {
+                                    Log.e(TAG, "❌ Retry failed for remote video view", retryException)
+                                }
+                            }, 500)
+                        }
+                    }
+                    
+                } else {
+                    Log.e(TAG, "❌ EGL context is null!")
+                    statusText.text = "Video initialization error"
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error getting EGL context", e)
+                isRemoteVideoViewInitialized = false
+                return
+            }
+            
             videoCallListener = object : WebRTCManager.WebRTCListener {
                 override fun onIceCandidate(candidate: org.webrtc.IceCandidate) {
                     // ICE candidates are handled in MainActivity during signaling
@@ -99,7 +166,7 @@ class VideoCallActivity : AppCompatActivity() {
                     runOnUiThread {
                         Log.d(TAG, "ICE Connection State: $newState")
                         statusText.text = when (newState) {
-                            PeerConnection.IceConnectionState.CONNECTED -> "Connected - waiting for video..."
+                            PeerConnection.IceConnectionState.CONNECTED -> "Connected - setting up video..."
                             PeerConnection.IceConnectionState.COMPLETED -> "Connection complete"
                             PeerConnection.IceConnectionState.DISCONNECTED -> "Disconnected"
                             PeerConnection.IceConnectionState.FAILED -> "Connection Failed"
@@ -115,46 +182,139 @@ class VideoCallActivity : AppCompatActivity() {
                         }
                     }
                 }
+
+                override fun onTrack(transceiver: RtpTransceiver) {
+                    runOnUiThread {
+                        Log.d(TAG, "onTrack called in VideoCallActivity")
+
+                        val track = transceiver.receiver?.track()
+                        Log.d(TAG, "Track details - id: ${track?.id()}, kind: ${track?.kind()}, enabled: ${track?.enabled()}")
+                        
+                        if (track is VideoTrack) {
+                            Log.d(TAG, "🎥 Received remote video track: ${track.id()}")
+
+                            // ENHANCED: Wait for proper initialization before adding track
+                            if (isRemoteVideoViewInitialized) {
+                                try {
+                                    Log.d(TAG, "🎥 Adding remote video track to initialized view")
+                                    track.addSink(remoteVideoView)
+                                    
+                                    // CRITICAL: Ensure proper view state for rendering
+                                    remoteVideoView.visibility = View.VISIBLE
+                                    remoteVideoView.bringToFront()
+                                    
+                                    // Force layout and rendering
+                                    remoteVideoView.requestLayout()
+                                    
+                                    statusText.text = "✅ Remote video connected!"
+                                    Log.d(TAG, "✅ Remote video track added successfully")
+                                    
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error adding remote video track", e)
+                                    statusText.text = "Remote video error: ${e.message}"
+                                    
+                                    // RETRY: Try to reinitialize and add track
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                        Log.d(TAG, "🔄 Retrying video track connection")
+                                        try {
+                                            val eglContext = manager.getEglBaseContext()
+                                            if (eglContext != null && !isRemoteVideoViewInitialized) {
+                                                remoteVideoView.init(eglContext, null)
+                                                isRemoteVideoViewInitialized = true
+                                            }
+                                            track.addSink(remoteVideoView)
+                                            statusText.text = "✅ Remote video connected (retry)!"
+                                            Log.d(TAG, "✅ Remote video track added on retry")
+                                        } catch (retryError: Exception) {
+                                            Log.e(TAG, "❌ Retry failed", retryError)
+                                        }
+                                    }, 1000)
+                                }
+                            } else {
+                                Log.w(TAG, "⚠️ Remote video view not initialized, scheduling retry")
+                                
+                                // ENHANCED RETRY: Multiple attempts with increasing delays
+                                val maxRetries = 5
+                                var retryCount = 0
+                                
+                                fun retryAddTrack() {
+                                    retryCount++
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                        if (isRemoteVideoViewInitialized) {
+                                            try {
+                                                Log.d(TAG, "🎥 Retry $retryCount: Adding video track")
+                                                track.addSink(remoteVideoView)
+                                                remoteVideoView.visibility = View.VISIBLE
+                                                statusText.text = "✅ Remote video connected (retry $retryCount)!"
+                                                Log.d(TAG, "✅ Remote video track added on retry $retryCount")
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "❌ Retry $retryCount failed", e)
+                                                if (retryCount < maxRetries) {
+                                                    retryAddTrack()
+                                                }
+                                            }
+                                        } else {
+                                            Log.w(TAG, "⚠️ View still not initialized, retry $retryCount")
+                                            if (retryCount < maxRetries) {
+                                                // Try to reinitialize the view
+                                                try {
+                                                    val eglContext = manager.getEglBaseContext()
+                                                    if (eglContext != null) {
+                                                        remoteVideoView.init(eglContext, null)
+                                                        isRemoteVideoViewInitialized = true
+                                                        Log.d(TAG, "🔄 Reinitialized view on retry $retryCount")
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e(TAG, "❌ View reinitialization failed", e)
+                                                }
+                                                retryAddTrack()
+                                            }
+                                        }
+                                    }, retryCount * 300L) // Increasing delay: 300ms, 600ms, 900ms, etc.
+                                }
+                                
+                                retryAddTrack()
+                            }
+                        } else if (track != null) {
+                            Log.d(TAG, "🎵 Received remote audio track: ${track.id()}")
+                        }
+                    }
+                }
                 
                 override fun onAddStream(stream: MediaStream) {
                     runOnUiThread {
-                        Log.d(TAG, "VideoCallActivity: Remote stream added: ${stream.id}")
-                        Log.d(TAG, "VideoCallActivity: Video tracks: ${stream.videoTracks.size}, Audio tracks: ${stream.audioTracks.size}")
+                        Log.d(TAG, "🌊 Remote stream added: ${stream.id}")
                         
-                        if (stream.videoTracks.isNotEmpty()) {
-                            val remoteVideoTrack = stream.videoTracks[0]
-                            Log.d(TAG, "VideoCallActivity: Adding remote video track to remoteVideoView")
+                        // Handle video tracks in the stream
+                        if (stream.videoTracks.size > 0) {
+                            Log.d(TAG, "Stream has ${stream.videoTracks.size} video tracks")
+                            val videoTrack = stream.videoTracks[0]
                             
-                            try {
-                                // Initialize remote video view with shared EglBase context
-                                val eglContext = manager.getEglBaseContext()
-                                remoteVideoView.init(eglContext, null)
-                                Log.d(TAG, "VideoCallActivity: Remote video view initialized with shared context")
-                                
-                                // Add the video track to the view
-                                remoteVideoTrack.addSink(remoteVideoView)
-                                statusText.text = "Remote video connected!"
-                                Log.d(TAG, "VideoCallActivity: Remote video track added to sink successfully")
-                                
-                                // Make sure the view is visible
-                                remoteVideoView.visibility = android.view.View.VISIBLE
-                                Log.d(TAG, "VideoCallActivity: Remote video view set to visible")
-                                
-                            } catch (e: Exception) {
-                                Log.e(TAG, "VideoCallActivity: Error setting up remote video", e)
-                                statusText.text = "Remote video error: ${e.message}"
+                            // Use same enhanced retry logic as onTrack
+                            if (isRemoteVideoViewInitialized) {
+                                try {
+                                    Log.d(TAG, "🎥 Adding video track from stream")
+                                    videoTrack.addSink(remoteVideoView)
+                                    remoteVideoView.visibility = View.VISIBLE
+                                    remoteVideoView.requestLayout()
+                                    statusText.text = "✅ Remote video from stream connected!"
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error adding video track from stream", e)
+                                }
+                            } else {
+                                Log.w(TAG, "⚠️ Remote video view not ready for stream")
                             }
-                        } else {
-                            Log.w(TAG, "VideoCallActivity: Remote stream has no video tracks")
-                            statusText.text = "Remote audio only"
+                        }
+                        
+                        // Handle audio tracks
+                        if (stream.audioTracks.size > 0) {
+                            Log.d(TAG, "Stream has ${stream.audioTracks.size} audio tracks")
                         }
                     }
                 }
                 
                 override fun onRemoveStream(stream: MediaStream) {
-                    runOnUiThread {
-                        Log.d(TAG, "Remote stream removed")
-                    }
+                    Log.d(TAG, "Remote stream removed: ${stream.id}")
                 }
                 
                 override fun onOfferCreated(sdp: SessionDescription) {
@@ -169,24 +329,31 @@ class VideoCallActivity : AppCompatActivity() {
             // Add the listener to the manager
             manager.addListener(videoCallListener!!)
             
-            // Use the shared WebRTC manager's video setup
-            Log.d("VideoCallActivity", "Setting up video with shared WebRTC manager")
-            statusText.text = "Connected - waiting for video..."
-            
-            // Set up local video capture in VideoCallActivity where the views exist
+            // Set up local video capture
             try {
+                Log.d(TAG, "Setting up local video capture")
                 manager.startLocalVideoCapture(localVideoView)
-                Log.d("VideoCallActivity", "Local video capture started")
-                statusText.text = "Video setup complete"
+                Log.d(TAG, "Local video capture started successfully")
+                statusText.text = "Video setup complete - connecting remote video..."
                 
                 // Set up voice detection
                 manager.setAudioLevelCallback { localActive, remoteActive ->
                     showVoiceIndicator(true, localActive && !isMuted)
                     showVoiceIndicator(false, remoteActive)
                 }
-                Log.d("VideoCallActivity", "Voice detection setup complete")
+                Log.d(TAG, "Voice detection setup complete")
+                
+                // EXTENDED TIMEOUT: Give more time for answer side remote video
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (statusText.text.contains("connecting remote video") || 
+                        statusText.text.contains("waiting for remote video")) {
+                        statusText.text = "Connected - remote video should appear soon"
+                        Log.w(TAG, "⚠️ Remote video still connecting after 8 seconds")
+                    }
+                }, 8000) // Extended to 8 seconds for answer side
+                
             } catch (e: Exception) {
-                Log.e("VideoCallActivity", "Error starting local video", e)
+                Log.e(TAG, "❌ Error starting local video", e)
                 statusText.text = "Local video error: ${e.message}"
             }
         }
@@ -201,11 +368,9 @@ class VideoCallActivity : AppCompatActivity() {
             if (isMuted) {
                 btnMute.setImageResource(android.R.drawable.ic_lock_silent_mode_off)
                 btnMute.setColorFilter(resources.getColor(R.color.error, null))
-                statusText.text = "Microphone muted"
             } else {
                 btnMute.setImageResource(android.R.drawable.ic_btn_speak_now)
                 btnMute.setColorFilter(resources.getColor(R.color.white, null))
-                statusText.text = "Connected"
             }
             
             Log.d(TAG, "Mute toggled: $isMuted")
@@ -223,11 +388,11 @@ class VideoCallActivity : AppCompatActivity() {
             if (isVideoEnabled) {
                 btnVideo.setImageResource(android.R.drawable.ic_menu_camera)
                 btnVideo.setColorFilter(resources.getColor(R.color.white, null))
-                localVideoView.visibility = android.view.View.VISIBLE
+                localVideoView.visibility = View.VISIBLE
             } else {
                 btnVideo.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
                 btnVideo.setColorFilter(resources.getColor(R.color.error, null))
-                localVideoView.visibility = android.view.View.GONE
+                localVideoView.visibility = View.GONE
             }
             
             Log.d(TAG, "Video toggled: $isVideoEnabled")
@@ -257,8 +422,8 @@ class VideoCallActivity : AppCompatActivity() {
                 val indicator = if (isLocal) localVoiceIndicator else remoteVoiceIndicator
                 
                 if (isActive) {
-                    if (indicator.visibility != android.view.View.VISIBLE) {
-                        indicator.visibility = android.view.View.VISIBLE
+                    if (indicator.visibility != View.VISIBLE) {
+                        indicator.visibility = View.VISIBLE
                         indicator.alpha = 0.0f
                         // Smooth fade in
                         indicator.animate()
@@ -267,13 +432,13 @@ class VideoCallActivity : AppCompatActivity() {
                             .start()
                     }
                 } else {
-                    if (indicator.visibility == android.view.View.VISIBLE) {
+                    if (indicator.visibility == View.VISIBLE) {
                         // Smooth fade out
                         indicator.animate()
                             .alpha(0.0f)
                             .setDuration(200)
                             .withEndAction {
-                                indicator.visibility = android.view.View.GONE
+                                indicator.visibility = View.GONE
                             }
                             .start()
                     }
@@ -322,24 +487,38 @@ class VideoCallActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        Log.d(TAG, "onDestroy called")
+        
         // Remove our listener
         videoCallListener?.let { listener ->
             webRTCManager?.removeListener(listener)
         }
+        
         // Clear references but don't dispose here since endCall() handles it
         webRTCManager = null
         videoCallListener = null
+        
+        // Clean up video views
+        try {
+            if (isRemoteVideoViewInitialized) {
+                remoteVideoView.release()
+                isRemoteVideoViewInitialized = false
+            }
+            localVideoView.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing video views", e)
+        }
     }
     
     override fun onPause() {
         super.onPause()
-        // SurfaceViewRenderer doesn't have onPause/onResume methods
-        // The lifecycle is handled automatically
+        Log.d(TAG, "onPause called")
+        // SurfaceViewRenderer lifecycle is handled automatically
     }
     
     override fun onResume() {
         super.onResume()
-        // SurfaceViewRenderer doesn't have onPause/onResume methods
-        // The lifecycle is handled automatically
+        Log.d(TAG, "onResume called")
+        // SurfaceViewRenderer lifecycle is handled automatically
     }
 }

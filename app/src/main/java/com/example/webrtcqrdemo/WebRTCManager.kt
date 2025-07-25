@@ -7,32 +7,33 @@ import org.webrtc.audio.AudioDeviceModule
 import org.webrtc.audio.JavaAudioDeviceModule
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import org.webrtc.RtpTransceiver
+import org.webrtc.SurfaceViewRenderer
 
 class WebRTCManager(private val context: Context) {
     
     companion object {
         private const val TAG = "WebRTCManager"
         private val STUN_SERVERS = listOf(
-            // STUN servers for NAT discovery
-            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
-            
-            // Simple STUN-only configuration for emulator/local testing
-            // Note: For real device-to-device testing, TURN servers would be needed
-            PeerConnection.IceServer.builder("stun:stun.ekiga.net").createIceServer(),
-            PeerConnection.IceServer.builder("stun:stun.voiparound.com").createIceServer(),
-            
-            // TURN servers (may not work in emulator environment)
-            PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer()
+            PeerConnection.IceServer.builder(
+                listOf(
+                    "stun:bn-turn2.xirsys.com",
+                    "turn:bn-turn2.xirsys.com:80?transport=udp",
+                    "turn:bn-turn2.xirsys.com:3478?transport=udp",
+                    "turn:bn-turn2.xirsys.com:80?transport=tcp",
+                    "turn:bn-turn2.xirsys.com:3478?transport=tcp",
+                    "turns:bn-turn2.xirsys.com:443?transport=tcp",
+                    "turns:bn-turn2.xirsys.com:5349?transport=tcp"
+                )
+            )
+            .setUsername("U3_C1ao-jRQeG-ZdydmBPl9Le5d3f8IFbUFEhrLpEVpGOv4kIJd8-UAxjGJUEXFJAAAAAGiB30JhZGRpeWFu")
+            .setPassword("fcd9c00a-685e-11f0-9a26-0242ac140004")
+            .createIceServer()
         )
     }
+
+    private val queuedRemoteCandidates = mutableListOf<IceCandidate>()
+    private var isRemoteDescriptionSet = false
     
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
@@ -59,6 +60,7 @@ class WebRTCManager(private val context: Context) {
     interface WebRTCListener {
         fun onIceCandidate(candidate: org.webrtc.IceCandidate)
         fun onIceConnectionChange(newState: PeerConnection.IceConnectionState)
+        fun onTrack(transceiver: RtpTransceiver)
         fun onAddStream(stream: MediaStream)
         fun onRemoveStream(stream: MediaStream)
         fun onOfferCreated(sdp: SessionDescription)
@@ -182,6 +184,7 @@ class WebRTCManager(private val context: Context) {
             
             // Pre-gather candidates for faster connection
             iceCandidatePoolSize = 4 // Reasonable pool size
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
         
         Log.d(TAG, "createPeerConnection: Creating peer connection with ${STUN_SERVERS.size} STUN servers")
@@ -241,11 +244,97 @@ class WebRTCManager(private val context: Context) {
                     listeners.forEach { listener -> listener.onIceConnectionChange(it) }
                 }
             }
-            
+
+            override fun onTrack(transceiver: RtpTransceiver?) {
+                if (transceiver == null) {
+                    Log.w(TAG, "onTrack called with null transceiver")
+                    return
+                }
+
+                val track = transceiver.receiver?.track()
+                Log.d(TAG, "🎯 onTrack: Track received - id=${track?.id()}, kind=${track?.kind()}, enabled=${track?.enabled()}")
+                Log.d(TAG, "🎯 onTrack: Transceiver direction=${transceiver.direction}")
+
+                // CRITICAL: Enhanced video track handling for answer side
+                if (track is VideoTrack) {
+                    Log.d(TAG, "🎥 onTrack: Processing video track for answer side")
+                    
+                    // Multiple attempts with delays to ensure connection
+                    if (remoteVideoSink != null) {
+                        Log.d(TAG, "🎥 onTrack: Adding video track to remote sink IMMEDIATELY")
+                        try {
+                            val videoSink = remoteVideoSink as? SurfaceViewRenderer
+                            if (videoSink != null) {
+                                track.addSink(videoSink)
+                                Log.d(TAG, "✅ onTrack: Video track added to remote sink successfully")
+                            } else {
+                                Log.e(TAG, "❌ onTrack: Remote video sink is not SurfaceViewRenderer")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ onTrack: Error adding track to remote sink", e)
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ onTrack: Remote video sink not ready, scheduling retry")
+                        // Schedule retry for answer side
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (remoteVideoSink != null) {
+                                Log.d(TAG, "🎥 onTrack: Retry - Adding video track to remote sink")
+                                try {
+                                    val videoSink = remoteVideoSink as? SurfaceViewRenderer
+                                    if (videoSink != null) {
+                                        track.addSink(videoSink)
+                                        Log.d(TAG, "✅ onTrack: Retry successful - Video track added")
+                                    } else {
+                                        Log.e(TAG, "❌ onTrack: Remote video sink is not SurfaceViewRenderer on retry")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ onTrack: Retry failed", e)
+                                }
+                            } else {
+                                Log.e(TAG, "❌ onTrack: Remote video sink still not ready after retry")
+                            }
+                        }, 500) // 500ms retry for answer side
+                    }
+                }
+
+                // Notify all listeners
+                listeners.forEach { listener ->
+                    try {
+                        listener.onTrack(transceiver)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "onTrack: Error notifying listener", e)
+                    }
+                }
+            }
+
             override fun onAddStream(stream: MediaStream?) {
                 stream?.let {
-                    Log.d(TAG, "Stream added: ${it.id}")
-                    listeners.forEach { listener -> listener.onAddStream(it) }
+                    Log.d(TAG, "🌊 Stream added: ${it.id}")
+                    
+                    // Handle video tracks - CRITICAL: Add to remote sink immediately
+                    if (it.videoTracks.size > 0) {
+                        Log.d(TAG, "Stream has ${it.videoTracks.size} video tracks")
+                        val videoTrack = it.videoTracks[0]
+                        
+                        // Try to add to remote sink if available
+                        remoteVideoSink?.let { sink ->
+                            try {
+                                Log.d(TAG, "🎥 Adding video track from stream to remote sink IMMEDIATELY")
+                                videoTrack.addSink(sink)
+                                Log.d(TAG, "✅ Video track from stream added to sink successfully")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Error adding video track from stream to sink", e)
+                            }
+                        }
+                    }
+                    
+                    listeners.forEach { listener -> 
+                        try {
+                            listener.onAddStream(it)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error notifying listener about stream", e)
+                        }
+                    }
                 }
             }
             
@@ -296,45 +385,17 @@ class WebRTCManager(private val context: Context) {
             override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>?) {
                 Log.d(TAG, "onIceCandidatesRemoved: ${candidates?.size} candidates")
             }
-            
+
             override fun onRenegotiationNeeded() {
                 Log.d(TAG, "onRenegotiationNeeded: Peer connection needs renegotiation")
             }
-            
+
+            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
+                Log.d(TAG, "onAddTrack called — no-op (handled via onTrack)")
+            }
+
             override fun onIceConnectionReceivingChange(receiving: Boolean) {
                 Log.d(TAG, "onIceConnectionReceivingChange: receiving=$receiving")
-            }
-            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
-                Log.d(TAG, "onAddTrack: Remote track added, receiver: ${receiver?.track()?.kind()}")
-                
-                receiver?.track()?.let { track ->
-                    when (track.kind()) {
-                        "video" -> {
-                            Log.d(TAG, "onAddTrack: Remote video track received")
-                            // Create a dummy MediaStream for compatibility with existing listener
-                            mediaStreams?.firstOrNull()?.let { stream ->
-                                Log.d(TAG, "onAddTrack: Notifying listener with video stream")
-                                listeners.forEach { listener -> listener.onAddStream(stream) }
-                            } ?: run {
-                                // If no stream provided, create one for the listener
-                                Log.d(TAG, "onAddTrack: Creating synthetic stream for video track")
-                                val syntheticStream = peerConnectionFactory?.createLocalMediaStream("remoteStream")
-                                syntheticStream?.let { stream ->
-                                    if (track is VideoTrack) {
-                                        stream.addTrack(track)
-                                        listeners.forEach { listener -> listener.onAddStream(stream) }
-                                    }
-                                }
-                            }
-                        }
-                        "audio" -> {
-                            Log.d(TAG, "onAddTrack: Remote audio track received")
-                        }
-                        else -> {
-                            Log.d(TAG, "onAddTrack: Unknown track type: ${track.kind()}")
-                        }
-                    }
-                }
             }
         })
         
@@ -450,9 +511,56 @@ class WebRTCManager(private val context: Context) {
     }
     
     fun setupRemoteVideoView(remoteVideoView: SurfaceViewRenderer) {
-        remoteVideoView.init(eglBase?.eglBaseContext, null)
-        remoteVideoSink = remoteVideoView
+        try {
+            Log.d(TAG, "🎥 setupRemoteVideoView: Setting up remote video view")
+            if (!remoteVideoView.isInitialized()) {
+                Log.d(TAG, "setupRemoteVideoView: Initializing remote video view")
+                remoteVideoView.init(eglBase?.eglBaseContext, null)
+            }
+            
+            // CRITICAL: Store the remote video sink for immediate use
+            remoteVideoSink = remoteVideoView
+            Log.d(TAG, "✅ setupRemoteVideoView: Remote video sink registered and ready")
+            
+            // If we already have existing remote video tracks, add them now
+            // This handles the case where the track arrived before the view was set up
+            tryAddExistingRemoteVideoTracks()
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ setupRemoteVideoView: Error setting up remote video view", e)
+        }
     }
+    
+    private fun tryAddExistingRemoteVideoTracks() {
+        try {
+            Log.d(TAG, "🔍 Checking for existing remote video tracks...")
+            
+            // Check transceivers for existing tracks
+            peerConnection?.transceivers?.forEach { transceiver ->
+                val track = transceiver.receiver?.track()
+                Log.d(TAG, "🎯 Transceiver found - direction: ${transceiver.direction}, track: ${track?.id()}, kind: ${track?.kind()}")
+                
+                if (track is VideoTrack && remoteVideoSink != null) {
+                    Log.d(TAG, "🎥 Found existing remote video track: ${track.id()}")
+                    try {
+                        // Cast to SurfaceViewRenderer for proper addSink method
+                        val videoSink = remoteVideoSink as? SurfaceViewRenderer
+                        if (videoSink != null) {
+                            track.addSink(videoSink)
+                            Log.d(TAG, "✅ Added existing video track to sink")
+                        } else {
+                            Log.e(TAG, "❌ Remote video sink is not SurfaceViewRenderer")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error adding existing video track (may already be added)", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking for existing tracks", e)
+        }
+    }
+
     
     private fun createCameraCapturer(): CameraVideoCapturer? {
         val enumerator = Camera2Enumerator(context)
@@ -490,6 +598,7 @@ class WebRTCManager(private val context: Context) {
         Log.d(TAG, "createOffer: Creating offer with constraints")
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(sessionDescription: SessionDescription?) {
+                Log.d(TAG, "SDP OFFER:\n${sessionDescription?.description}")
                 Log.d(TAG, "createOffer: Offer created successfully")
                 sessionDescription?.let {
                     Log.d(TAG, "createOffer: Setting local description")
@@ -529,18 +638,34 @@ class WebRTCManager(private val context: Context) {
         
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true")) // Enable video
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
         }
         
         Log.d(TAG, "createAnswer: Creating answer with constraints")
         peerConnection?.createAnswer(object : SdpObserver {
             override fun onCreateSuccess(sessionDescription: SessionDescription?) {
+                Log.d(TAG, "SDP ANSWER:\n${sessionDescription?.description}")
                 Log.d(TAG, "createAnswer: Answer created successfully")
                 sessionDescription?.let {
                     Log.d(TAG, "createAnswer: Setting local description for answer")
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onSetSuccess() {
                             Log.d(TAG, "createAnswer: Local description set successfully")
+                            
+                            // CRITICAL: Enhanced answer side track detection after local description
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                Log.d(TAG, "🔍 Answer side: Check after local description set")
+                                tryAddExistingRemoteVideoTracks()
+                                checkTransceiversForTracks("After local description")
+                            }, 150)
+                            
+                            // Additional check with longer delay
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                Log.d(TAG, "🔍 Answer side: Extended check after local description")
+                                tryAddExistingRemoteVideoTracks()
+                                checkTransceiversForTracks("Extended after local description")
+                            }, 500)
+                            
                             Log.d(TAG, "createAnswer: Calling onAnswerCreated listener")
                             listeners.forEach { listener -> listener.onAnswerCreated(it) }
                         }
@@ -555,7 +680,6 @@ class WebRTCManager(private val context: Context) {
             
             override fun onCreateFailure(error: String?) {
                 Log.e(TAG, "createAnswer: Failed to create answer: $error")
-                Log.e(TAG, "createAnswer: Check if remote description was set properly and media tracks are added")
             }
             
             override fun onSetSuccess() {}
@@ -563,7 +687,7 @@ class WebRTCManager(private val context: Context) {
         }, constraints)
     }
     
-    fun setRemoteDescription(sessionDescription: SessionDescription) {
+    fun setRemoteDescription(sessionDescription: SessionDescription, onSuccess: () -> Unit) {
         if (!checkNotDisposed()) return
         Log.d(TAG, "setRemoteDescription: Setting remote description")
         if (peerConnection == null) {
@@ -573,7 +697,48 @@ class WebRTCManager(private val context: Context) {
         
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onSetSuccess() {
-                Log.d(TAG, "setRemoteDescription: Remote description set successfully")
+                Log.d(TAG, "✅ Remote description set successfully")
+                isRemoteDescriptionSet = true
+
+                // Apply queued candidates now
+                Log.d(TAG, "🔁 Flushing ${queuedRemoteCandidates.size} queued ICE candidates")
+                queuedRemoteCandidates.forEach {
+                    peerConnection?.addIceCandidate(
+                        org.webrtc.IceCandidate(it.sdpMid, it.sdpMLineIndex, it.candidate)
+                    )
+                }
+                queuedRemoteCandidates.clear()
+                onSuccess()
+                
+                // CRITICAL: Enhanced answer side remote track handling
+                // Multiple delayed checks to catch tracks that arrive at different times
+                
+                // Immediate check
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    Log.d(TAG, "🔍 Answer side: IMMEDIATE check for remote tracks after setRemoteDescription")
+                    tryAddExistingRemoteVideoTracks()
+                }
+                
+                // Short delay check (100ms) - for tracks that arrive quickly
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    Log.d(TAG, "🔍 Answer side: SHORT delay check for remote tracks")
+                    tryAddExistingRemoteVideoTracks()
+                    checkTransceiversForTracks("SHORT delay")
+                }, 100)
+                
+                // Medium delay check (300ms) - for tracks that arrive after negotiation
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    Log.d(TAG, "🔍 Answer side: MEDIUM delay check for remote tracks")
+                    tryAddExistingRemoteVideoTracks()
+                    checkTransceiversForTracks("MEDIUM delay")
+                }, 300)
+                
+                // Long delay check (800ms) - final attempt for late-arriving tracks
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    Log.d(TAG, "🔍 Answer side: LONG delay check for remote tracks")
+                    tryAddExistingRemoteVideoTracks()
+                    checkTransceiversForTracks("LONG delay")
+                }, 800)
             }
             
             override fun onSetFailure(error: String?) {
@@ -584,9 +749,68 @@ class WebRTCManager(private val context: Context) {
             override fun onCreateFailure(p0: String?) {}
         }, sessionDescription)
     }
+
+    private fun checkTransceiversForTracks(checkType: String) {
+        try {
+            Log.d(TAG, "🎯 checkTransceiversForTracks ($checkType): Examining all transceivers")
+            
+            peerConnection?.transceivers?.forEachIndexed { index, transceiver ->
+                val track = transceiver.receiver?.track()
+                val direction = transceiver.direction
+                val mid = transceiver.mid
+                
+                Log.d(TAG, "🎯 Transceiver $index ($checkType): mid=$mid, direction=$direction, track=${track?.id()}, kind=${track?.kind()}, enabled=${track?.enabled()}")
+                
+                // Focus on receiving transceivers
+                if (direction == RtpTransceiver.RtpTransceiverDirection.RECV_ONLY ||
+                    direction == RtpTransceiver.RtpTransceiverDirection.SEND_RECV) {
+                    
+                    if (track is VideoTrack) {
+                        Log.d(TAG, "🎥 Found video track in transceiver ($checkType): ${track.id()}")
+                        
+                        if (remoteVideoSink != null) {
+                            try {
+                                Log.d(TAG, "🎥 Adding video track from transceiver ($checkType) to remote sink")
+                                val videoSink = remoteVideoSink as? SurfaceViewRenderer
+                                if (videoSink != null) {
+                                    // Check if track is already added to avoid exceptions
+                                    track.addSink(videoSink)
+                                    Log.d(TAG, "✅ Video track from transceiver ($checkType) added successfully")
+                                } else {
+                                    Log.e(TAG, "❌ Remote video sink is not SurfaceViewRenderer ($checkType)")
+                                }
+                            } catch (e: Exception) {
+                                // This is expected if track is already added
+                                Log.d(TAG, "🔄 Track may already be added to sink ($checkType): ${e.message}")
+                            }
+                        } else {
+                            Log.w(TAG, "⚠️ No remote video sink available ($checkType)")
+                        }
+                    } else if (track != null) {
+                        Log.d(TAG, "🎵 Found audio track in transceiver ($checkType): ${track.id()}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error checking transceivers ($checkType)", e)
+        }
+    }
     
     fun addIceCandidate(candidate: org.webrtc.IceCandidate) {
         if (!checkNotDisposed()) return
+
+        if (!isRemoteDescriptionSet) {
+            Log.w(TAG, "🕓 Remote description not set yet. Queuing ICE candidate.")
+            queuedRemoteCandidates.add(
+                com.example.webrtcqrdemo.IceCandidate(
+                    candidate = candidate.sdp,
+                    sdpMid = candidate.sdpMid,
+                    sdpMLineIndex = candidate.sdpMLineIndex
+                )
+            )
+            return
+        }
+
         Log.d(TAG, "addIceCandidate: Adding remote ICE candidate: ${candidate.sdp}")
         val result = peerConnection?.addIceCandidate(candidate)
         Log.d(TAG, "addIceCandidate: Result = $result")
@@ -650,6 +874,17 @@ class WebRTCManager(private val context: Context) {
     fun setAudioLevelCallback(callback: (Boolean, Boolean) -> Unit) {
         audioLevelCallback = callback
         startVoiceDetection()
+    }
+
+    // Extension function to check if SurfaceViewRenderer is initialized
+    private fun SurfaceViewRenderer.isInitialized(): Boolean {
+        return try {
+            // Try to access a property that would fail if not initialized
+            this.visibility != null
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
     
     private fun startVoiceDetection() {

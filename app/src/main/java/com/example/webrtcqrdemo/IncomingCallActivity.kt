@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -12,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
 import org.webrtc.SessionDescription
 import android.app.NotificationManager
+import org.webrtc.RtpTransceiver
 
 class IncomingCallActivity : AppCompatActivity() {
     
@@ -119,8 +119,20 @@ class IncomingCallActivity : AppCompatActivity() {
                 
                 // Set remote description (offer)
                 val sessionDescription = SessionDescription(SessionDescription.Type.OFFER, offer)
-                manager.setRemoteDescription(sessionDescription)
-                
+                manager.setRemoteDescription(sessionDescription) {
+                    // Only called when setRemoteDescription succeeds
+                    Log.d(TAG, "✅ Remote description set. Now adding received ICE candidates.")
+
+                    // Apply candidates from the signaling payload
+                    iceCandidates?.forEach { candidate ->
+                        manager.addIceCandidate(
+                            org.webrtc.IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate)
+                        ) // this uses your updated queue logic
+                    }
+
+                    manager.createAnswer()
+                }
+
                 // Set up listener for answer creation
                 manager.setListener(object : WebRTCManager.WebRTCListener {
                     override fun onIceCandidate(candidate: org.webrtc.IceCandidate) {
@@ -150,6 +162,10 @@ class IncomingCallActivity : AppCompatActivity() {
                         }
                     }
                     
+                    override fun onTrack(transceiver: RtpTransceiver) {
+                        Log.d(TAG, "Remote track added")
+                    }
+
                     override fun onAddStream(stream: org.webrtc.MediaStream) {
                         Log.d(TAG, "Remote stream added")
                     }
@@ -175,9 +191,6 @@ class IncomingCallActivity : AppCompatActivity() {
                         }
                     }
                 })
-                
-                // Create answer
-                manager.createAnswer()
                 
             } ?: run {
                 Log.e(TAG, "WebRTC manager not available")
