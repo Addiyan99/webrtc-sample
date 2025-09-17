@@ -386,8 +386,8 @@ class MainActivity : AppCompatActivity() {
             }
             
             override fun onCallAnswered(answer: String, iceCandidates: List<IceCandidate>) {
+                Log.d(TAG, "Call answered! Received answer with ${iceCandidates.size} ICE candidates")
                 runOnUiThread {
-                    Log.d(TAG, "Call answered")
                     handleCallAnswered(answer, iceCandidates)
                 }
             }
@@ -438,17 +438,6 @@ class MainActivity : AppCompatActivity() {
             
             webRTCManager?.let { manager ->
                 Log.d(TAG, "Creating peer connection...")
-                try {
-                    manager.createPeerConnection()
-                    Log.d(TAG, "Peer connection created, adding media tracks...")
-                    manager.addMediaTracks()
-                    Log.d(TAG, "Media tracks added, setting up listener...")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in WebRTC setup", e)
-                    statusText.text = "WebRTC setup failed: ${e.message}"
-                    return
-                }
-                
                 // Set up listener for offer creation
                 manager.setListener(object : WebRTCManager.WebRTCListener {
                     override fun onIceCandidate(candidate: org.webrtc.IceCandidate) {
@@ -512,6 +501,17 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
                 
+                try {
+                    manager.createPeerConnection()
+                    Log.d(TAG, "Peer connection created, adding media tracks...")
+                    manager.addMediaTracks()
+                    Log.d(TAG, "Media tracks added, setting up listener...")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in WebRTC setup", e)
+                    statusText.text = "WebRTC setup failed: ${e.message}"
+                    return
+                }
+                
                 Log.d(TAG, "Calling createOffer()...")
                 try {
                     manager.createOffer()
@@ -568,6 +568,8 @@ class MainActivity : AppCompatActivity() {
     private fun showIncomingCall(fromUserId: String, offer: String, iceCandidates: List<IceCandidate>) {
         try {
             Log.d(TAG, "showIncomingCall: Incoming call from $fromUserId")
+
+            val iceCandidatesJson = convertIceCandidatesToJson(iceCandidates)
             
             // Wake up the device using modern approach
             val powerManager = getSystemService(POWER_SERVICE) as android.os.PowerManager
@@ -581,6 +583,7 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, IncomingCallActivity::class.java).apply {
                 putExtra(IncomingCallActivity.EXTRA_CALLER_ID, fromUserId)
                 putExtra(IncomingCallActivity.EXTRA_OFFER, offer)
+                putExtra(IncomingCallActivity.EXTRA_ICE_CANDIDATES, iceCandidatesJson)
                 // Note: ICE candidates would need proper serialization in a real app
                 
                 // Modern flags for incoming call display
@@ -657,32 +660,50 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Error showing incoming call: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
-    
+
+    private fun convertIceCandidatesToJson(iceCandidates: List<IceCandidate>): String {
+        val jsonArray = org.json.JSONArray()
+        iceCandidates.forEach { candidate ->
+            val candidateJson = org.json.JSONObject().apply {
+                put("candidate", candidate.candidate)
+                put("sdpMid", candidate.sdpMid)
+                put("sdpMLineIndex", candidate.sdpMLineIndex)
+            }
+            jsonArray.put(candidateJson)
+        }
+        return jsonArray.toString()
+    }
     
     private fun handleCallAnswered(answer: String, iceCandidates: List<IceCandidate>) {
+        Log.d(TAG, "Processing call answer...")
+        
         try {
             webRTCManager?.let { manager ->
-                val sessionDescription = org.webrtc.SessionDescription(
-                    org.webrtc.SessionDescription.Type.ANSWER,
+                statusText.text = "Answer received, establishing connection..."
+                
+                // Set remote description (answer)
+                val answerDescription = org.webrtc.SessionDescription(
+                    org.webrtc.SessionDescription.Type.ANSWER, 
                     answer
                 )
-                manager.setRemoteDescription(sessionDescription){}
                 
-                // Add ICE candidates
-                iceCandidates.forEach { candidate ->
-                    val webrtcCandidate = org.webrtc.IceCandidate(
-                        candidate.sdpMid,
-                        candidate.sdpMLineIndex,
-                        candidate.candidate
-                    )
-                    manager.addIceCandidate(webrtcCandidate)
+                manager.setRemoteDescription(answerDescription) {
+                    Log.d(TAG, "Answer set as remote description")
+                    
+                    // Add the answerer's ICE candidates
+                    iceCandidates.forEach { candidate ->
+                        manager.addIceCandidate(
+                            org.webrtc.IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate)
+                        )
+                    }
+                    
+                    Log.d(TAG, "Added ${iceCandidates.size} ICE candidates from answer")
+                    statusText.text = "Connecting..."
                 }
-                
-                statusText.text = "Answer received, connecting..."
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling call answer", e)
-            statusText.text = "Failed to process answer"
+            statusText.text = "Failed to process answer: ${e.message}"
         }
     }
     
